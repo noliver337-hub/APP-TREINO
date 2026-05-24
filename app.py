@@ -47,38 +47,41 @@ if "concluidos" not in st.session_state:
 if "status_exercicios" not in st.session_state:
     st.session_state.status_exercicios = {dia: {} for dia in dias_semana}
 
-dia_selecionado = st.selectbox("Selecione o dia para editar o treino:", dias_semana)
+dia_selecionado = st.selectbox("Selecione o dia:", dias_semana)
 
-with st.form(key="form_treino"):
-    detalhes = st.text_area(f"Exercícios para {dia_selecionado}:", 
-                            value=st.session_state.treinos[dia_selecionado],
-                            placeholder="Digite um exercício por linha. Ex:\nSupino Reto 3x12\nAgachamento 4x10")
+if perfil == "Administrador":
+    st.info("Painel de Edição: Defina os treinos para a semana.")
+    with st.form(key="form_treino"):
+        detalhes = st.text_area(f"Editar exercícios para {dia_selecionado}:", 
+                                value=st.session_state.treinos[dia_selecionado],
+                                placeholder="Digite um exercício por linha. Ex:\nSupino Reto 3x12\nAgachamento 4x10")
 
-    if st.form_submit_button("Salvar Treino"):
-        st.session_state.treinos[dia_selecionado] = detalhes
-        # Transforma cada linha em um exercício no checklist
-        linhas = [linha.strip() for linha in detalhes.split('\n') if linha.strip()]
-        # Preserva o status se o exercício já existia, senão cria como Falso
-        st.session_state.status_exercicios[dia_selecionado] = {
-            ex: st.session_state.status_exercicios[dia_selecionado].get(ex, False) for ex in linhas
-        }
-        st.success(f"Treino de {dia_selecionado} atualizado com sucesso!")
-
-# Seção de execução do treino
-if st.session_state.status_exercicios[dia_selecionado]:
-    st.write(f"### Checklist de {dia_selecionado}")
-    todos_feitos = True
-    
-    for exercicio in st.session_state.status_exercicios[dia_selecionado]:
-        # Cria um checkbox para cada exercício definido
-        marcado = st.checkbox(exercicio, value=st.session_state.status_exercicios[dia_selecionado][exercicio], key=f"check_{dia_selecionado}_{exercicio}")
-        st.session_state.status_exercicios[dia_selecionado][exercicio] = marcado
-        if not marcado:
-            todos_feitos = False
-    
-    st.session_state.concluidos[dia_selecionado] = todos_feitos
-    if todos_feitos:
-        st.success("⭐ Todos os exercícios de hoje foram concluídos!")
+        if st.form_submit_button("Salvar Treino"):
+            st.session_state.treinos[dia_selecionado] = detalhes
+            salvar_dados(st.session_state.treinos)
+            # Atualiza a lista de exercícios para o checklist
+            linhas = [linha.strip() for linha in detalhes.split('\n') if linha.strip()]
+            st.session_state.status_exercicios[dia_selecionado] = {
+                ex: st.session_state.status_exercicios[dia_selecionado].get(ex, False) for ex in linhas
+            }
+            st.success(f"Treino de {dia_selecionado} salvo com sucesso!")
+else:
+    # Seção de execução do treino (Apenas para Usuário)
+    if st.session_state.status_exercicios.get(dia_selecionado):
+        st.write(f"### Checklist de {dia_selecionado}")
+        todos_feitos = True
+        
+        for exercicio in st.session_state.status_exercicios[dia_selecionado]:
+            marcado = st.checkbox(exercicio, value=st.session_state.status_exercicios[dia_selecionado][exercicio], key=f"check_{dia_selecionado}_{exercicio}")
+            st.session_state.status_exercicios[dia_selecionado][exercicio] = marcado
+            if not marcado:
+                todos_feitos = False
+        
+        st.session_state.concluidos[dia_selecionado] = todos_feitos
+        if todos_feitos:
+            st.success("⭐ Todos os exercícios de hoje foram concluídos!")
+    else:
+        st.warning("Nenhum treino cadastrado para hoje. Peça ao Administrador para configurar.")
 
 with st.expander("Visualizar Cronograma da Semana"):
     for dia, info in st.session_state.treinos.items():
