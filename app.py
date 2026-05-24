@@ -1,4 +1,23 @@
 import streamlit as st
+import json
+import os
+
+# Nome do arquivo para persistência de dados
+DATA_FILE = "treinos_data.json"
+
+def carregar_dados():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {dia: "" for dia in ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]}
+
+def salvar_dados(dados):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=4)
+
+# Inicializa os treinos carregando do arquivo
+if "treinos" not in st.session_state:
+    st.session_state.treinos = carregar_dados()
 
 # Configuração da página do aplicativo
 st.set_page_config(page_title="Meu Primeiro App", page_icon="🚀", layout="centered")
@@ -7,28 +26,12 @@ st.set_page_config(page_title="Meu Primeiro App", page_icon="🚀", layout="cent
 st.title("🚀 Olá! Este é o meu novo App")
 st.write("Criado no VS Code e rodando localmente com Python e Streamlit.")
 
-# Linha divisória
-st.markdown("---")
+# Barra lateral (Sidebar) para Controle de Acesso
+st.sidebar.header("🔐 Acesso")
+perfil = st.sidebar.radio("Escolha o perfil:", ["Usuário", "Administrador"])
 
-# Seção Interativa 1: Entrada de Texto
-nome = st.text_input("Como se chama?", placeholder="Digite o seu nome aqui...")
-
-if nome:
-    st.success(f"Bem-vindo ao app, **{nome}**! 🎉")
-
-# Seção Interativa 2: Contador de Cliques
-st.subheader("Contador Interativo")
-st.write("Clique no botão abaixo para testar o estado do app:")
-
-# Inicializa o contador se ele não existir
-if "cliques" not in st.session_state:
-    st.session_state.cliques = 0
-
-# Botão que soma cliques
-if st.button("Clique Aqui! 🔥"):
-    st.session_state.cliques += 1
-
-st.info(f"O botão foi clicado **{st.session_state.cliques}** vezes.")
+if perfil == "Administrador":
+    st.sidebar.warning("Modo Edição Ativado")
 
 # Seção 3: Planejador de Treinos Semanal
 st.markdown("---")
