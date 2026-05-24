@@ -1,0 +1,91 @@
+import streamlit as st
+
+# Configuração da página do aplicativo
+st.set_page_config(page_title="Meu Primeiro App", page_icon="🚀", layout="centered")
+
+# Título Principal
+st.title("🚀 Olá! Este é o meu novo App")
+st.write("Criado no VS Code e rodando localmente com Python e Streamlit.")
+
+# Linha divisória
+st.markdown("---")
+
+# Seção Interativa 1: Entrada de Texto
+nome = st.text_input("Como se chama?", placeholder="Digite o seu nome aqui...")
+
+if nome:
+    st.success(f"Bem-vindo ao app, **{nome}**! 🎉")
+
+# Seção Interativa 2: Contador de Cliques
+st.subheader("Contador Interativo")
+st.write("Clique no botão abaixo para testar o estado do app:")
+
+# Inicializa o contador se ele não existir
+if "cliques" not in st.session_state:
+    st.session_state.cliques = 0
+
+# Botão que soma cliques
+if st.button("Clique Aqui! 🔥"):
+    st.session_state.cliques += 1
+
+st.info(f"O botão foi clicado **{st.session_state.cliques}** vezes.")
+
+# Seção 3: Planejador de Treinos Semanal
+st.markdown("---")
+st.subheader("💪 Planejador de Treinos da Semana")
+
+dias_semana = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+
+# Inicializa o dicionário de treinos se não existir
+if "treinos" not in st.session_state:
+    st.session_state.treinos = {dia: "" for dia in dias_semana}
+if "concluidos" not in st.session_state:
+    st.session_state.concluidos = {dia: False for dia in dias_semana}
+if "status_exercicios" not in st.session_state:
+    st.session_state.status_exercicios = {dia: {} for dia in dias_semana}
+
+dia_selecionado = st.selectbox("Selecione o dia para editar o treino:", dias_semana)
+
+with st.form(key="form_treino"):
+    detalhes = st.text_area(f"Exercícios para {dia_selecionado}:", 
+                            value=st.session_state.treinos[dia_selecionado],
+                            placeholder="Digite um exercício por linha. Ex:\nSupino Reto 3x12\nAgachamento 4x10")
+
+    if st.form_submit_button("Salvar Treino"):
+        st.session_state.treinos[dia_selecionado] = detalhes
+        # Transforma cada linha em um exercício no checklist
+        linhas = [linha.strip() for linha in detalhes.split('\n') if linha.strip()]
+        # Preserva o status se o exercício já existia, senão cria como Falso
+        st.session_state.status_exercicios[dia_selecionado] = {
+            ex: st.session_state.status_exercicios[dia_selecionado].get(ex, False) for ex in linhas
+        }
+        st.success(f"Treino de {dia_selecionado} atualizado com sucesso!")
+
+# Seção de execução do treino
+if st.session_state.status_exercicios[dia_selecionado]:
+    st.write(f"### Checklist de {dia_selecionado}")
+    todos_feitos = True
+    
+    for exercicio in st.session_state.status_exercicios[dia_selecionado]:
+        # Cria um checkbox para cada exercício definido
+        marcado = st.checkbox(exercicio, value=st.session_state.status_exercicios[dia_selecionado][exercicio], key=f"check_{dia_selecionado}_{exercicio}")
+        st.session_state.status_exercicios[dia_selecionado][exercicio] = marcado
+        if not marcado:
+            todos_feitos = False
+    
+    st.session_state.concluidos[dia_selecionado] = todos_feitos
+    if todos_feitos:
+        st.success("⭐ Todos os exercícios de hoje foram concluídos!")
+
+with st.expander("Visualizar Cronograma da Semana"):
+    for dia, info in st.session_state.treinos.items():
+        status = "✅" if st.session_state.concluidos[dia] else "⬜"
+        st.write(f"{status} **{dia}:** {info if info else 'Descanso / Não definido'}")
+
+# Linha divisória
+st.markdown("---")
+
+# Barra lateral (Sidebar)
+st.sidebar.header("Configurações do App")
+opcao = st.sidebar.selectbox("Escolha uma opção de visualização:", ["Padrão", "Modo Escuro", "Modo Minimalista"])
+st.sidebar.write(f"Opção selecionada: **{opcao}**") 
