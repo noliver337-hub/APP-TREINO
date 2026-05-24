@@ -6,19 +6,30 @@ import os
 DATA_FILE = "treinos_data.json"
 
 def carregar_dados():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
     dias = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
-    # Estrutura: { dia: { "texto": "...", "status": { "Exercicio 1": False } } }
-    return {dia: {"texto": "", "status": {}} for dia in dias}
+    dados_padrao = {dia: {"texto": "", "status": {}} for dia in dias}
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+                # Migração/Verificação de formato para evitar erros de 'string indices'
+                for dia in dias:
+                    if dia not in dados or not isinstance(dados[dia], dict):
+                        # Se era string (formato antigo), move para a nova chave 'texto'
+                        texto_antigo = dados.get(dia, "") if isinstance(dados.get(dia), str) else ""
+                        dados[dia] = {"texto": texto_antigo, "status": {}}
+                return dados
+        except Exception:
+            return dados_padrao
+    return dados_padrao
 
 def salvar_dados(dados):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
 # Inicializa o estado global carregando do arquivo
-if "treinos" not in st.session_state:
+# Verifica se o formato na sessão atual é válido, senão recarrega
+if "treinos" not in st.session_state or not isinstance(list(st.session_state.treinos.values())[0], dict):
     st.session_state.treinos = carregar_dados()
 
 # Configuração da página do aplicativo
