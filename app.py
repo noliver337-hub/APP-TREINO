@@ -7,17 +7,33 @@ DATA_FILE = "treinos_data.json"
 
 def carregar_dados():
     dias = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
-    dados_padrao = {dia: {"texto": "", "status": {}} for dia in dias}
+    treinos_vazio = {dia: {"texto": "", "status": {}} for dia in dias}
+    dados_padrao = {
+        "centrais": [],
+        "usuarios": {
+            "admin": {"senha": "admin", "role": "admin", "central": "Sistema", "treinos": treinos_vazio}
+        }
+    }
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 dados = json.load(f)
-                # Migração/Verificação de formato para evitar erros de 'string indices'
-                for dia in dias:
-                    if dia not in dados or not isinstance(dados[dia], dict):
-                        # Se era string (formato antigo), move para a nova chave 'texto'
-                        texto_antigo = dados.get(dia, "") if isinstance(dados.get(dia), str) else ""
-                        dados[dia] = {"texto": texto_antigo, "status": {}}
+                
+                if "usuarios" not in dados:
+                    # MIGRACAO: Se encontrar treinos no formato antigo, move para o admin
+                    migrados = {}
+                    for dia in dias:
+                        # Tenta pegar os dados existentes ou cria vazio
+                        val = dados.get(dia, {"texto": "", "status": {}})
+                        if isinstance(val, str): # Formato texto puro
+                            migrados[dia] = {"texto": val, "status": {}}
+                        else: # Formato texto + status
+                            migrados[dia] = val
+                    
+                    dados = dados_padrao
+                    dados["usuarios"]["admin"]["treinos"] = migrados
+                    salvar_dados(dados)
+                
                 return dados
         except Exception:
             return dados_padrao
@@ -28,88 +44,127 @@ def salvar_dados(dados):
         json.dump(dados, f, ensure_ascii=False, indent=4)
 
 # Inicializa o estado global carregando do arquivo
-# Verifica se o formato na sessão atual é válido, senão recarrega
-if "treinos" not in st.session_state or not isinstance(list(st.session_state.treinos.values())[0], dict):
-    st.session_state.treinos = carregar_dados()
+if "db" not in st.session_state:
+    st.session_state.db = carregar_dados()
+if "auth" not in st.session_state:
+    st.session_state.auth = None
 
 # Configuração da página do aplicativo
-st.set_page_config(page_title="Meu Primeiro App", page_icon="🚀", layout="centered")
-
-# Título Principal
-st.title("🚀 Olá! Este é o meu novo App")
-st.write("Criado no VS Code e rodando localmente com Python e Streamlit.")
-
-# Barra lateral (Sidebar) para Controle de Acesso
-st.sidebar.header("🔐 Acesso")
-perfil = st.sidebar.radio("Escolha o perfil:", ["Usuário", "Administrador"])
-
-if perfil == "Administrador":
-    st.sidebar.warning("Modo Edição Ativado")
-
-# Seção 3: Planejador de Treinos Semanal
-st.markdown("---")
-st.subheader("💪 Planejador de Treinos da Semana")
+st.set_page_config(page_title="Sistema de Treino Pro", page_icon="💪", layout="centered")
 
 dias_semana = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
 
-dia_selecionado = st.selectbox("Selecione o dia:", dias_semana)
+# --- SISTEMA DE LOGIN ---
+if st.session_state.auth is None:
+    st.title("🔐 Login do Sistema")
+    with st.form("login_form"):
+        user_input = st.text_input("Usuário")
+        pass_input = st.text_input("Senha", type="password")
+        if st.form_submit_button("Entrar"):
+            if user_input in st.session_state.db["usuarios"] and st.session_state.db["usuarios"][user_input]["senha"] == pass_input:
+                st.session_state.auth = user_input
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos")
+    st.stop()
 
-if perfil == "Administrador":
-    st.info("Painel de Edição: Defina os treinos para a semana.")
-    with st.form(key="form_treino"):
-        detalhes = st.text_area(f"Editar exercícios para {dia_selecionado}:", 
-                                value=st.session_state.treinos[dia_selecionado]["texto"],
-                                placeholder="Digite um exercício por linha...")
+# --- INTERFACE LOGADA ---
+user_logado = st.session_state.auth
+dados_user = st.session_state.db["usuarios"][user_logado]
+role = dados_user.get("role", "user")
 
-        if st.form_submit_button("Salvar Treino"):
-            # Atualiza o texto
-            st.session_state.treinos[dia_selecionado]["texto"] = detalhes
+st.sidebar.title(f"Olá, {user_logado}!")
+st.sidebar.write(f"Central: {dados_user.get('central', 'N/A')}")
+if st.sidebar.button("Sair"):
+    st.session_state.auth = None
+    st.rerun()
+
+if role == "admin":
+    st.title("🎮 Painel de Controle ADM")
+    
+    tab1, tab2, tab3 = st.tabs(["Centrais", "Usuários", "Montar Treinos"])
+    
+    with tab1:
+        st.subheader("Cadastrar Nova Central")
+        nova_central = st.text_input("Nome da Central")
+        if st.button("Adicionar Central"):
+            if nova_central and nova_central not in st.session_state.db["centrais"]:
+                st.session_state.db["centrais"].append(nova_central)
+                salvar_dados(st.session_state.db)
+                st.success("Central cadastrada!")
+                st.rerun()
+
+    with tab2:
+        st.subheader("Cadastrar Novo Usuário")
+        with st.form("cad_user"):
+            new_login = st.text_input("Login")
+            new_pass = st.text_input("Senha")
+            central_user = st.selectbox("Vincular à Central", st.session_state.db["centrais"])
+            if st.form_submit_button("Salvar Usuário"):
+                if new_login and new_pass:
+                    st.session_state.db["usuarios"][new_login] = {
+                        "senha": new_pass,
+                        "role": "user",
+                        "central": central_user,
+                        "treinos": {dia: {"texto": "", "status": {}} for dia in dias_semana}
+                    }
+                    salvar_dados(st.session_state.db)
+                    st.success(f"Usuário {new_login} criado!")
+
+    with tab3:
+        st.subheader("Montar Treino por Usuário")
+        lista_users = [u for u, d in st.session_state.db["usuarios"].items() if d["role"] == "user"]
+        if lista_users:
+            user_alvo = st.selectbox("Selecionar Aluno", lista_users)
+            dia_alvo = st.selectbox("Dia da Semana", dias_semana, key="admin_dia")
             
-            # Gera novo dicionário de status baseado nas linhas
-            linhas = [l.strip() for l in detalhes.split('\n') if l.strip()]
-            novo_status = {ex: False for ex in linhas}
+            texto_atual = st.session_state.db["usuarios"][user_alvo]["treinos"][dia_alvo]["texto"]
+            detalhes = st.text_area("Exercícios (um por linha)", value=texto_atual)
             
-            # Mantém o progresso se o nome do exercício for idêntico
-            for ex in linhas:
-                if ex in st.session_state.treinos[dia_selecionado]["status"]:
-                    novo_status[ex] = st.session_state.treinos[dia_selecionado]["status"][ex]
-            
-            st.session_state.treinos[dia_selecionado]["status"] = novo_status
-            salvar_dados(st.session_state.treinos)
-            st.success("Configuração salva!")
-            st.rerun()
+            if st.button("Salvar Treino do Aluno"):
+                st.session_state.db["usuarios"][user_alvo]["treinos"][dia_alvo]["texto"] = detalhes
+                # Sincroniza Checklist
+                linhas = [l.strip() for l in detalhes.split('\n') if l.strip()]
+                old_status = st.session_state.db["usuarios"][user_alvo]["treinos"][dia_alvo]["status"]
+                st.session_state.db["usuarios"][user_alvo]["treinos"][dia_alvo]["status"] = {
+                    ex: old_status.get(ex, False) for ex in linhas
+                }
+                salvar_dados(st.session_state.db)
+                st.success("Treino atualizado!")
+        else:
+            st.info("Cadastre um usuário primeiro.")
+
+st.markdown("---")
+# --- INTERFACE DE TREINOS (Disponível para todos os perfis) ---
+st.title("💪 Meus Treinos")
+dia_selecionado = st.selectbox("Selecione o dia para treinar:", dias_semana)
+
+if "treinos" not in dados_user:
+    st.warning("Seu plano de treinos ainda não foi montado.")
 else:
-    # Interface do Usuário: Checklist
-    dados_dia = st.session_state.treinos[dia_selecionado]
-    if dados_dia["status"]:
+    treino_dia = dados_user["treinos"][dia_selecionado]
+    if treino_dia["status"]:
         st.write(f"### Checklist de {dia_selecionado}")
-        
         progresso_alterado = False
-        for exercicio in list(dados_dia["status"].keys()):
-            # Checkbox para cada exercício
-            marcado = st.checkbox(exercicio, value=dados_dia["status"][exercicio], key=f"cb_{dia_selecionado}_{exercicio}")
-            if marcado != dados_dia["status"][exercicio]:
-                st.session_state.treinos[dia_selecionado]["status"][exercicio] = marcado
+        for exercicio in list(treino_dia["status"].keys()):
+            # Key única baseada no usuário, dia e exercício
+            key = f"check_{user_logado}_{dia_selecionado}_{exercicio}"
+            marcado = st.checkbox(exercicio, value=treino_dia["status"][exercicio], key=key)
+            if marcado != treino_dia["status"][exercicio]:
+                st.session_state.db["usuarios"][user_logado]["treinos"][dia_selecionado]["status"][exercicio] = marcado
                 progresso_alterado = True
         
         if progresso_alterado:
-            salvar_dados(st.session_state.treinos)
+            salvar_dados(st.session_state.db)
             st.rerun()
-
-        # Verifica se tudo foi concluído
-        if all(dados_dia["status"].values()) and dados_dia["status"]:
-            st.success("⭐ Todos os exercícios de hoje foram concluídos!")
+        
+        if all(treino_dia["status"].values()) and treino_dia["status"]:
+            st.success("⭐ Treino de hoje concluído!")
     else:
-        st.warning("Nenhum exercício definido para hoje.")
+        st.info("Nenhum exercício cadastrado para hoje.")
 
-with st.expander("Visualizar Cronograma da Semana"):
-    for dia, dados in st.session_state.treinos.items():
-        # O dia está concluído apenas se houver exercícios e todos estiverem True
-        concluido = all(dados["status"].values()) if dados["status"] else False
-        status_icon = "✅" if concluido else "⬜"
-        st.write(f"{status_icon} **{dia}:** {dados['texto'] if dados['texto'] else 'Descanso'}")
-
-# Barra lateral (Sidebar)
-st.sidebar.header("Configurações do App")
-opcao = st.sidebar.selectbox("Escolha uma opção de visualização:", ["Padrão", "Modo Escuro", "Modo Minimalista"])
-st.sidebar.write(f"Opção selecionada: **{opcao}**") 
+with st.expander("Visualizar Resumo da Semana"):
+    if "treinos" in dados_user:
+        for dia, info in dados_user["treinos"].items():
+            concluido = all(info["status"].values()) if info["status"] else False
+            st.write(f"{'✅' if concluido else '⬜'} **{dia}:** {info['texto'][:50]}...")
